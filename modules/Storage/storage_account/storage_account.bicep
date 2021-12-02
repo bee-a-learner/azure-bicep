@@ -1,11 +1,9 @@
 @maxLength(24)
 @minLength(3)
 @description('name of the storage account resource')
-param storage_account_name string= ''
+param storage_account_name string= 'st${uniqueString(resourceGroup().name)}'
 
 @allowed([
-  'East Asia'
-  'Southeast Asia'       
   'Central US'           
   'East US'  
   'East US 2'
@@ -14,28 +12,10 @@ param storage_account_name string= ''
   'South Central US'    
   'North Europe'        
   'West Europe'         
-  'Japan West'          
-  'Japan East'          
-  'Brazil South'        
-  'Australia East'      
-  'Australia Southeast' 
-  'South India'         
-  'Central India'       
-  'West India'          
-  'Canada Central'      
-  'Canada East'         
   'UK South'
   'UK West' 
   'West Central US'     
   'West US 2'
-  'Korea Central'       
-  'Korea South'         
-  'France Central'      
-  'France South'        
-  'Australia Central'   
-  'Australia Central 2' 
-  'South Africa North'  
-  'South Africa West' 
 ])
 @description('region of the storage account resource')
 param location string = 'UK South'
