@@ -1,58 +1,111 @@
-param existingVnetName string
-param existingSubnetName string
+@description('Specifies the location of AKS cluster.')
+param location string = resourceGroup().location
 
-@minLength(1)
-@maxLength(62)
-param dnsLabelPrefix string
+@description('Specifies the id of the virtual network.')
+param virtualNetworkId string
 
-param vmSize string = 'Standard_A2_v2'
-param domainToJoin string
-param domainUserName string
+@description('Specifies the idof the subnet which contains the virtual machine.')
+param vmSubnetId string
 
-@secure()
-param domainPassword string
+@description('Specifies the name of the virtual machine.')
+param vmName string = 'TestVm'
 
-param ouPath string
+@description('Specifies the size of the virtual machine.')
+param vmSize string = 'Standard_DS3_v2'
 
-@description('Set of bit flags that define the join options. Default value of 3 is a combination of NETSETUP_JOIN_DOMAIN (0x00000001) & NETSETUP_ACCT_CREATE (0x00000002) i.e. will join the domain and create the account on the domain. For more information see https://msdn.microsoft.com/en-us/library/aa392154(v=vs.85).aspx')
-param domainJoinOptions int = 3
+@description('Specifies the image publisher of the disk image used to create the virtual machine.')
+param imagePublisher string = 'Canonical'
 
+@description('Specifies the offer of the platform image or marketplace image used to create the virtual machine.')
+param imageOffer string = 'UbuntuServer'
+
+@description('Specifies the Ubuntu version for the VM. This will pick a fully patched image of this given Ubuntu version.')
+param imageSku string = '18.04-LTS'
+
+@allowed([
+  'sshPublicKey'
+  'password'
+])
+@description('Specifies the type of authentication when accessing the Virtual Machine. SSH key is recommended.')
+param authenticationType string = 'password'
+
+@description('Specifies the name of the administrator account of the virtual machine.')
 param vmAdminUsername string
 
+@description('Specifies the SSH Key or password for the virtual machine. SSH key is recommended.')
 @secure()
-param vmAdminPassword string
+param vmAdminPasswordOrKey string
 
-param location string = resourceGroup().location
-var storageAccountName = uniqueString(resourceGroup().id, deployment().name)
-var imagePublisher = 'MicrosoftWindowsServer'
-var imageOffer = 'WindowsServer'
-var windowsOSVersion = '2019-Datacenter'
-var nicName = '${dnsLabelPrefix}-nic'
-var publicIpName = '${dnsLabelPrefix}-pip'
-var subnetId = resourceId('Microsoft.Network/virtualNetworks/subnets', existingVnetName, existingSubnetName)
+@allowed([
+  'Premium_LRS'
+  'StandardSSD_LRS'
+  'Standard_LRS'
+  'UltraSSD_LRS'
+])
+@description('Specifies the storage account type for OS and data disk.')
+param diskStorageAccounType string = 'Premium_LRS'
 
-resource publicIp 'Microsoft.Network/publicIPAddresses@2020-06-01' = {
-  name: publicIpName
-  location: location
-  properties: {
-    publicIPAllocationMethod: 'Dynamic'
-    dnsSettings: {
-      domainNameLabel: dnsLabelPrefix
-    }
+@minValue(0)
+@maxValue(64)
+@description('Specifies the number of data disks of the virtual machine.')
+param numDataDisks int = 1
+
+@description('Specifies the size in GB of the OS disk of the VM.')
+param osDiskSize int = 50
+
+@description('Specifies the size in GB of the OS disk of the virtual machine.')
+param dataDiskSize int = 50
+
+@description('Specifies the caching requirements for the data disks.')
+param dataDiskCaching string = 'ReadWrite'
+
+@description('Specifies the globally unique name for the storage account used to store the boot diagnostics logs of the virtual machine.')
+param blobStorageAccountName string = 'blob${uniqueString(resourceGroup().id)}'
+
+@description('Specifies the name of the private link to the boot diagnostics storage account.')
+param blobStorageAccountPrivateEndpointName string = 'BlobStorageAccountPrivateEndpoint'
+
+@description('Specifies the id of the Log Analytics Workspace.')
+param logAnalyticsWorkspaceId string
+
+var vmNicName = '${vmName}Nic'
+var vmNicId = vmNic.id
+var blobPublicDNSZoneForwarder = '.blob.${environment().suffixes.storage}'
+var blobPrivateDnsZoneName = 'privatelink${blobPublicDNSZoneForwarder}'
+var blobStorageAccountPrivateEndpointGroupName = 'blob'
+var omsAgentForLinuxName = 'LogAnalytics'
+var omsDependencyAgentForLinuxName = 'DependencyAgent'
+var linuxConfiguration = {
+  disablePasswordAuthentication: true
+  ssh: {
+    publicKeys: [
+      {
+        path: '/home/${vmAdminUsername}/.ssh/authorized_keys'
+        keyData: vmAdminPasswordOrKey
+      }
+    ]
   }
+  provisionVMAgent: true
 }
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2020-08-01-preview' = {
-  name: storageAccountName
+var virtualNetworkName = last(split(virtualNetworkId, '/'))
+var logAnalyticsWorkspaceName = last(split(logAnalyticsWorkspaceId, '/'))
+
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2020-10-01' existing = {
+  name: logAnalyticsWorkspaceName
+}
+
+resource blobStorageAccount 'Microsoft.Storage/storageAccounts@2021-01-01' = {
+  name: blobStorageAccountName
   location: location
-  kind: 'StorageV2'
   sku: {
     name: 'Standard_LRS'
   }
+  kind: 'StorageV2'
 }
 
-resource nic 'Microsoft.Network/networkInterfaces@2020-06-01' = {
-  name: nicName
+resource vmNic 'Microsoft.Network/networkInterfaces@2020-08-01' = {
+  name: vmNicName
   location: location
   properties: {
     ipConfigurations: [
@@ -60,11 +113,8 @@ resource nic 'Microsoft.Network/networkInterfaces@2020-06-01' = {
         name: 'ipconfig1'
         properties: {
           privateIPAllocationMethod: 'Dynamic'
-          publicIPAddress: {
-            id: publicIp.id
-          }
           subnet: {
-            id: subnetId
+            id: vmSubnetId
           }
         }
       }
@@ -72,73 +122,88 @@ resource nic 'Microsoft.Network/networkInterfaces@2020-06-01' = {
   }
 }
 
-resource virtualMachine 'Microsoft.Compute/virtualMachines@2020-06-01' = {
-  name: dnsLabelPrefix
+resource virtualMachines 'Microsoft.Compute/virtualMachines@2020-12-01' = {
+  name: vmName
   location: location
   properties: {
     hardwareProfile: {
       vmSize: vmSize
     }
     osProfile: {
-      computerName: dnsLabelPrefix
+      computerName: vmName
       adminUsername: vmAdminUsername
-      adminPassword: vmAdminPassword
+      adminPassword: vmAdminPasswordOrKey
+      linuxConfiguration: ((authenticationType == 'password') ? null : linuxConfiguration)
     }
     storageProfile: {
       imageReference: {
         publisher: imagePublisher
         offer: imageOffer
-        sku: windowsOSVersion
+        sku: imageSku
         version: 'latest'
       }
       osDisk: {
-        name: '${dnsLabelPrefix}-OsDisk'
+        name: '${vmName}_OSDisk'
         caching: 'ReadWrite'
         createOption: 'FromImage'
-      }
-      dataDisks: [
-        {
-          name: '${dnsLabelPrefix}-DataDisk'
-          caching: 'None'
-          createOption: 'Empty'
-          diskSizeGB: 1024
-          lun: 0
+        diskSizeGB: osDiskSize
+        managedDisk: {
+          storageAccountType: diskStorageAccounType
         }
-      ]
+      }
+      dataDisks: [for j in range(0, numDataDisks): {
+        caching: dataDiskCaching
+        diskSizeGB: dataDiskSize
+        lun: j
+        name: '${vmName}-DataDisk${j}'
+        createOption: 'Empty'
+        managedDisk: {
+          storageAccountType: diskStorageAccounType
+        }
+      }]
     }
     networkProfile: {
       networkInterfaces: [
         {
-          id: nic.id
+          id: vmNic.id
         }
       ]
     }
     diagnosticsProfile: {
       bootDiagnostics: {
         enabled: true
-        storageUri: storageAccount.properties.primaryEndpoints.blob
+        storageUri: blobStorageAccount.properties.primaryEndpoints.blob
       }
     }
   }
 }
 
-resource virtualMachineExtension 'Microsoft.Compute/virtualMachines/extensions@2020-06-01' = {
-  name: '${virtualMachine.name}/joindomain'
+resource omsAgentForLinux 'Microsoft.Compute/virtualMachines/extensions@2020-12-01' = {
+  parent: virtualMachines
+  name: omsAgentForLinuxName
   location: location
   properties: {
-    publisher: 'Microsoft.Compute'
-    type: 'JsonADDomainExtension'
-    typeHandlerVersion: '1.3'
-    autoUpgradeMinorVersion: true
+    publisher: 'Microsoft.EnterpriseCloud.Monitoring'
+    type: 'OmsAgentForLinux'
+    typeHandlerVersion: '1.13'
     settings: {
-      name: domainToJoin
-      ouPath: ouPath
-      user: '${domainToJoin}\\${domainUserName}'
-      restart: true
-      options: domainJoinOptions
+      workspaceId: logAnalyticsWorkspace.properties.customerId
+      stopOnMultipleConnections: false
     }
     protectedSettings: {
-      password: domainPassword
+      workspaceKey: logAnalyticsWorkspace.listKeys().primarySharedKey
     }
+  }
+}
+
+resource omsDependencyAgentForLinux 'Microsoft.Compute/virtualMachines/extensions@2020-12-01' = {
+  parent: virtualMachines
+  name: omsDependencyAgentForLinuxName
+  location: location
+  properties: {
+    publisher: 'Microsoft.Azure.Monitoring.DependencyAgent'
+    type: 'DependencyAgentLinux'
+    typeHandlerVersion: '9.10'
+    autoUpgradeMinorVersion: true
   }
 }

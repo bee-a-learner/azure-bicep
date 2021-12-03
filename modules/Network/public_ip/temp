@@ -1,0 +1,56 @@
+// @description('The basename of the storage account to create.')
+// param basename string =''
+
+//  @description('A list of prefix to append as the first characters of the generated name - prefixes will be separated by the separator character.')
+//  param prefixes array = ['company' 'project' ]
+
+
+// @description('A list of additional suffix added after the basename, this is can be used to append resource index (eg. str001). Suffixes are separated by the separator character.')
+// param suffixes array =['location' 'env' 'instance']
+
+// @description('Configure additional characters to append to the generated resource name. Random characters will remain compliant with the set of allowed characters per resources and will be appended after the suffixes.')
+// param random_length int = 0
+
+// @description('Define the seed to be used for random generator. 0 will not be respected and will generate a seed based in the unix time of the generation.')
+// param random_seed int = 0
+
+// @description('Enables the passthrough mode - in that case only the basename is considered and the prefixes, suffixes, random, and are ignored.')
+// param passthrough bool = false
+
+
+// @description('If a slug should be added to the name - If you put false no slug (the few letters that identify the resource type) will be added to the name.')
+// param use_slug bool = true
+
+
+// @description('The separator character to use between prefixes, resource type, base name, suffixes, randon character.')
+// param separator string = '-'
+
+
+// substring(coalesce(var.unique-seed, local.random_safe_generation), 0, var.unique-length)
+
+ 
+
+/*
+random_safe_generation = join("", [random_string.first_letter.result, random_string.main.result])
+  random                 = substr(coalesce(var.unique-seed, local.random_safe_generation), 0, var.unique-length)
+  prefix                 = join("-", var.prefix)
+  prefix_safe            = lower(join("", var.prefix))
+  suffix                 = join("-", var.suffix)
+  suffix_unique          = join("-", concat(var.suffix, [local.random]))
+  suffix_safe            = lower(join("", var.suffix))
+  suffix_unique_safe     = lower(join("", concat(var.suffix, [local.random])))
+api_management = {
+  name        = substr(join("", compact([local.prefix_safe, "apim", local.suffix_safe])), 0, 50)
+  name_unique = substr(join("", compact([local.prefix_safe, "apim", local.suffix_unique_safe])), 0, 50)
+  dashes      = false
+  slug        = "apim"
+  min_length  = 1
+  max_length  = 50
+  scope       = "global"
+  regex       = "^[a-z][a-zA-Z0-9]+$"
+}
+api_management = {
+  valid_name        = length(regexall(local.az.api_management.regex, local.az.api_management.name)) > 0 && length(local.az.api_management.name) > local.az.api_management.min_length
+  valid_name_unique = length(regexall(local.az.api_management.regex, local.az.api_management.name_unique)) > 0
+}
+*/
