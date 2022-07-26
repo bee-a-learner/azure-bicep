@@ -2,4 +2,3 @@
 azure bicep
 
 
-sfjsadfsafhaskjfh
