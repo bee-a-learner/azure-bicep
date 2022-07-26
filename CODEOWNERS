@@ -1,11 +1,11 @@
 # This is the list of reviewers to approve any thing in this repo
 
-* @suraywanshi-rakesh
+* @krish-terraform
 
 # what if i, like to approve only json 
 
-*.js @suraywanshi-rakesh
+*.js @krish-terraform
 
 #what if target spec folder
 
-/docs/* @suraywanshi-rakesh
+/docs/* @krish-terraform
