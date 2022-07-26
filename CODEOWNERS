@@ -1,1 +1,11 @@
+# This is the list of reviewers to approve any thing in this repo
 
+* @krishrocks1904
+
+# what if i, like to approve only json 
+
+*.js @krishrocks1904
+
+#what if target spec folder
+
+/docs/* @krishrocks1904
